@@ -1,0 +1,5 @@
+.env
+venv/
+interviews.db
+__pycache__/
+*.pyc
