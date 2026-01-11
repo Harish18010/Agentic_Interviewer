@@ -1,11 +1,9 @@
-langchain-google-genai
-langgraph
-crewai
 langchain
+langchain-groq
+langgraph
+streamlit
 pydantic
 python-dotenv
-streamlit
-google-generativeai
 pypdf
 gTTS
 fpdf

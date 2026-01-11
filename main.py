@@ -25,13 +25,14 @@ if "sys_metrics" not in st.session_state:
 if "user_id" not in st.session_state: st.session_state.user_id = generate_user_id()
 
 st.title("AI Technical Interviewer")
+st.markdown("---")
 
 with st.sidebar:
-    st.header(f"ID: {st.session_state.user_id}")
-    st.caption("Save this ID to load history later.")
+    st.header(f"Candidate ID: {st.session_state.user_id}")
+    st.caption("Save this ID to resume or load history.")
     st.divider()
     
-    st.header("1. Candidate Info")
+    st.subheader("1. Setup Profile")
     uploaded_file = st.file_uploader("Upload Resume (PDF)", type=["pdf"])
     
     experience_level = st.selectbox(
@@ -40,40 +41,50 @@ with st.sidebar:
         index=1
     )
     
-    st.header("2. Target Role")
+    st.subheader("2. Target Role")
     company_type = st.selectbox(
         "Target Company",
         ["SDE (FAANG / Product Based)", "SDE (Startup / Generalist)", "AI / ML Engineer", "Product Manager (PM)", "SDE (Service Based)"]
     )
     
-    start_btn = st.button("Start Interview")
+    start_btn = st.button("Start Interview", use_container_width=True, type="primary")
 
     if st.session_state.interview_active:
         st.divider()
-        st.metric("Tokens", st.session_state.sys_metrics["total_tokens"])
+        st.subheader("Live Metrics")
+        col1, col2 = st.columns(2)
+        col1.metric("Tokens", st.session_state.sys_metrics["total_tokens"])
+        if st.session_state.sys_metrics["latencies"]:
+            avg_lat = sum(st.session_state.sys_metrics["latencies"]) / len(st.session_state.sys_metrics["latencies"])
+            col2.metric("Avg Latency", f"{avg_lat:.2f}s")
 
     st.divider()
-    lookup_id = st.text_input("Load User ID:", value=st.session_state.user_id)
-    if lookup_id:
-        history = fetch_history(lookup_id)
-        if history:
-            for run in history:
-                run_id, run_role, run_time = run
-                with st.expander(f"{run_time} - {run_role}"):
-                    if st.button("Download Report", key=f"hist_{run_id}"):
+    with st.expander("Interview History"):
+        lookup_id = st.text_input("Load User ID:", value=st.session_state.user_id)
+        if lookup_id:
+            history = fetch_history(lookup_id)
+            if history:
+                for run in history:
+                    run_id, run_role, run_time = run
+                    if st.button(f"{run_time[:10]} - {run_role}", key=f"hist_{run_id}"):
                         log_data = get_interview_data(run_id)
                         if log_data:
                             pdf_file = generate_pdf_report("Candidate", run_role, log_data)
                             with open(pdf_file, "rb") as f:
                                 st.download_button("Download PDF", f, f"Report_{run_id}.pdf")
+            else:
+                st.info("No history found.")
 
 if start_btn and uploaded_file:
-    with st.spinner("Analyzing Resume & Generating Questions..."):
+    with st.status("Initializing Interview ", expanded=True) as status:
+        st.write("Parsing Resume...")
         resume_text = get_pdf_text(uploaded_file)
         
+        st.write("Analyzing Profile...")
         profile = analyze_resume(resume_text)
         st.session_state.profile = profile
         
+      
         role = profile.get("role", company_type)
         questions = generate_questions(profile, role, company_type, experience_level)
         st.session_state.question_bank = questions
@@ -94,15 +105,28 @@ if start_btn and uploaded_file:
             "messages": [],
             "feedback_log": [],
             "sys_metrics": st.session_state.sys_metrics,
-            "follow_up_count": 0
+            "follow_up_count": 0,
+            "current_grade_status": "Pending"
         }
         
+        st.write("Interviewer is ready...")
         first_q_response = ask_question_node(initial_state)
+        
+        if "sys_metrics" in first_q_response:
+            st.session_state.sys_metrics = first_q_response["sys_metrics"]
+            
         st.session_state.messages = [first_q_response["messages"][0]]
         st.session_state.interview_active = True
         
-        audio_file = f"audio_intro_{int(time.time())}.mp3"
+        audio_file = "temp_audio.mp3"
         saved_path = text_to_speech(first_q_response["messages"][0].content, filename=audio_file)
+        
+        status.update(label="Interview Started!", state="complete", expanded=False)
+        time.sleep(1)
+        
+        if saved_path:
+            with open(saved_path, "rb") as f:
+                st.audio(f.read(), format="audio/mp3", autoplay=True)
         
         st.rerun()
 
@@ -111,18 +135,20 @@ if st.session_state.interview_active:
         role = "user" if isinstance(msg, HumanMessage) else "assistant"
         with st.chat_message(role):
             if "###_HIDDEN_FEEDBACK_###" in msg.content:
-                st.info(" (Audio Feedback Provided)") 
+                st.info("(Audio Feedback Played)") 
             else:
                 st.markdown(msg.content)
 
-    if user_input := st.chat_input("Type your answer..."):
+    if user_input := st.chat_input("Type your answer here..."):
         st.session_state.messages.append(HumanMessage(content=user_input))
         with st.chat_message("user"):
             st.markdown(user_input)
 
         app = build_graph()
         
-        with st.spinner("Thinking..."):
+        with st.status("AI Agents at work...", expanded=True) as status:
+            st.write("Interviewer is evaluating your response...")
+            
             current_inputs = {
                 "messages": [HumanMessage(content=user_input)], 
                 "current_question_index": st.session_state.current_question_index,
@@ -130,49 +156,58 @@ if st.session_state.interview_active:
                 "feedback_log": st.session_state.feedback_log,
                 "follow_up_count": st.session_state.get("follow_up_count", 0),
                 "sys_metrics": st.session_state.sys_metrics,
-                "experience_level": experience_level
+                "experience_level": experience_level,
+                "current_grade_status": "Pending"
             }
             
             result = app.invoke(current_inputs)
+            
+            st.write("Interviewer is formulating next response...")
             
             st.session_state.current_question_index = result["current_question_index"]
             st.session_state.follow_up_count = result.get("follow_up_count", 0)
             if "sys_metrics" in result: st.session_state.sys_metrics = result["sys_metrics"]
             if "feedback_log" in result: st.session_state.feedback_log = result["feedback_log"]
             
-            new_msgs = result["messages"]
-            is_transition = (len(new_msgs) > 1)
+            all_msgs = result["messages"]
+            new_msgs = [m for m in all_msgs if isinstance(m, AIMessage)]
             
+            status.update(label="Response Ready", state="complete", expanded=False)
+            
+            if new_msgs:
+                combined_text = " ... ".join([m.content for m in new_msgs])
+                audio_file = "temp_audio.mp3"
+                saved_path = text_to_speech(combined_text, filename=audio_file)
+                if saved_path: 
+                    with open(saved_path, "rb") as f:
+                        st.audio(f.read(), format="audio/mp3", autoplay=True)
+
             for i, msg in enumerate(new_msgs):
                 with st.chat_message("assistant"):
-                    if is_transition and i == 0:
-                        audio_file = f"audio_feed_{int(time.time())}.mp3"
-                        saved_path = text_to_speech(msg.content, filename=audio_file)
-                        if saved_path: st.audio(saved_path, format="audio/mp3", autoplay=True)
-                        
-                        st.info(" Playing Feedback...")
+                    if i == 0 and st.session_state.sys_metrics["latencies"]:
+                        last_latency = st.session_state.sys_metrics["latencies"][-1]
+                        st.caption(f"Latency: {last_latency:.2f}s | Total Tokens: {st.session_state.sys_metrics['total_tokens']}")
+
+                    if len(new_msgs) > 1 and i == 0:
+                        st.info("Playing Feedback...")
                         st.session_state.messages.append(AIMessage(content=f"###_HIDDEN_FEEDBACK_### {msg.content}"))
-                        
                     else:
                         st.markdown(msg.content)
                         st.session_state.messages.append(msg)
-                        
-                        if is_transition: time.sleep(1.5)
-                        
-                        audio_file = f"audio_q_{int(time.time())}.mp3"
-                        saved_path = text_to_speech(msg.content, filename=audio_file)
-                        if saved_path: st.audio(saved_path, format="audio/mp3", autoplay=True)
 
             if st.session_state.current_question_index >= len(st.session_state.question_bank):
-                st.success("Interview Complete!")
+                st.success("Interview Complete! Generating Report...")
                 st.session_state.interview_active = False
                 
                 save_interview(st.session_state.user_id, company_type, st.session_state.feedback_log)
                 
+                if os.path.exists("temp_audio.mp3"):
+                    os.remove("temp_audio.mp3")
+                
                 pdf_file = generate_pdf_report(st.session_state.profile.get("name", "Candidate"), company_type, st.session_state.feedback_log)
                 with open(pdf_file, "rb") as f:
-                    st.download_button("Download Report", f, "Interview_Report.pdf")
+                    st.download_button("Download Detailed Report", f, "Interview_Report.pdf", type="primary")
 
 else:
     if not uploaded_file:
-        st.info("Please upload your resume to start.")
+        st.info("Welcome! Please upload your resume on the left sidebar to begin.")

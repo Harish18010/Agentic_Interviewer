@@ -1,31 +1,30 @@
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 from utils.llm_config import get_llm
+import random 
 
 def get_strategy_prompt(role: str, company_type: str, experience_level: str) -> str:
-    
     
     design_topic = "System Design (Scalability focus)"
     if experience_level in ["Intern", "Fresher"]:
         design_topic = "Object Oriented Design (e.g., Chess Game) or Logic Puzzle"
     
-   
     if company_type == "AI / ML Engineer" or ("AI" in role or "Data" in role):
         return f"""
         STRATEGY: AI ENGINEER ({experience_level})
-        - Q1 (Theory): Select ONE random core concept (Bias/Variance, Overfitting, Transformers, etc.).
-        - Q2 (Project): Architecture or Loss function specific to their project.
-        - Q3 (Project): Model Optimization/Training.
-        - Q4 (System): {"MLOps/Deployment scenario" if experience_level not in ["Intern", "Fresher"] else "Basic Model Evaluation Metrics"}.
-        - Q5 (Hard): {"Research Trends (Scaling Laws)" if experience_level not in ["Intern", "Fresher"] else "Basic ML Algorithm Implementation logic"}.
+        - Q1 (Theory): Select ONE random core unexpected tricky and random concept from machine learning /deep learning /generative AI.
+        - Q2 (Project): Architecture or Loss function specific to their project and improvements which can be made.
+        - Q3 (Project): Any important part of project a senior engineer would notice.
+        - Q4 (System): {"MLOps/Deployment scenario" if experience_level not in ["Intern", "Fresher"] else " Model Evaluation Metrics not limited to classical ML can ask generative AI also"}.
+        - Q5 (Hard): {"Research Trends (Scaling Laws)" if experience_level not in ["Intern", "Fresher"] else "Tricky practical use case of ML/DL/Gen AI Algorithm Implementation logic "}.
         """
 
     elif company_type == "SDE (FAANG / Product Based)":
         return f"""
         STRATEGY: PRODUCT BASED / FAANG ({experience_level})
-        - Q1 (CS Fundamentals): OS/DBMS/Networks.
-        - Q2 (DSA - Medium): Standard Array/String/LinkedList problem.
-        - Q3 (DSA - Hard): Graph/DP/Tree problem. Specify constraints.
+        - Q1 (CS Fundamentals): Practical application of OS/DBMS/Networks.
+        - Q2 (DSA - Medium): Leetcode Medium Array/String/LinkedList problem.
+        - Q3 (DSA - Hard):Leetcode Medium/Hard Graph/DP/Tree problem. Specify constraints.
         - Q4 (Project): Technical challenge deep dive.
         - Q5 (Design): {design_topic}.
         """
@@ -64,14 +63,18 @@ def get_strategy_prompt(role: str, company_type: str, experience_level: str) -> 
     
 
 def generate_questions(resume_data: dict, role: str, company_type: str, experience_level: str):
-    llm = get_llm(temperature=0.6) 
+    llm = get_llm(temperature=0.9) 
     parser = JsonOutputParser()
     
     strategy_instruction = get_strategy_prompt(role, company_type, experience_level)
+    seed = random.randint(1, 10000)
 
     prompt_template = PromptTemplate(
         template="""
         You are a Senior Technical Interviewer.
+        
+        # SYSTEM CONTEXT
+        - Random Seed: {seed}
         
         CANDIDATE PROFILE:
         {resume_data}
@@ -93,8 +96,6 @@ def generate_questions(resume_data: dict, role: str, company_type: str, experien
         - If asking about LeetCode Hard, specify the constraints.
         - If asking for RCA/Guesstimate, ensure it is open-ended.
 
-
-
         OUTPUT SCHEMA (Strict JSON):
         [
             {{
@@ -108,19 +109,20 @@ def generate_questions(resume_data: dict, role: str, company_type: str, experien
 
         {format_instructions}
         """,
-        input_variables=["resume_data", "company_type", "strategy_instruction", "experience_level"],
+        input_variables=["resume_data", "company_type", "strategy_instruction", "experience_level", "seed"],
         partial_variables={"format_instructions": parser.get_format_instructions()}
     )
 
     chain = prompt_template | llm | parser
 
     try:
-        print(f"Generating Questions for {experience_level} level...")
+        print(f"Generating Questions for {experience_level} level (Seed: {seed})...")
         questions = chain.invoke({
             "resume_data": str(resume_data),
             "company_type": company_type,
             "strategy_instruction": strategy_instruction,
-            "experience_level": experience_level
+            "experience_level": experience_level,
+            "seed": seed
         })
         return questions
     except Exception as e:

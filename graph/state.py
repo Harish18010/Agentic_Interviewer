@@ -23,4 +23,5 @@ class InterviewState(TypedDict):
     feedback_report: str
     feedback_log: Annotated[List[Dict], operator.add]
     follow_up_count: int
-    experience_level:str
+    experience_level: str
+    current_grade_status: str

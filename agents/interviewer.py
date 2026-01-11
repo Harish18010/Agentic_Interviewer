@@ -1,4 +1,5 @@
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.messages import AIMessage
 from utils.llm_config import get_llm
 import time
 
@@ -14,8 +15,9 @@ def ask_question_node(state):
     
     if idx >= len(questions):
         return {
-            "messages": [{"role": "assistant", "content": "Thank you! That concludes our interview. I have gathered enough data to provide feedback."}],
-            "current_question_index": idx 
+            "messages": [AIMessage(content="Thank you! That concludes our interview. I have gathered enough data to provide feedback.")],
+            "current_question_index": idx,
+            "sys_metrics": sys_metrics
         }
     
     current_q = questions[idx]
@@ -52,11 +54,19 @@ def ask_question_node(state):
         "raw_question": current_q["question"]
     })
     end_time = time.time()
+    
     latency = end_time - start_time
-    token_usage = response.response_metadata.get('usage_metadata', {}).get('total_token_count', 0)
+    
+    usage = response.response_metadata.get('usage_metadata')
+    if usage:
+        token_usage = usage.get('total_token_count', 0)
+    else:
+        token_usage = response.response_metadata.get('token_usage', {}).get('total_tokens', 0)
+    
     sys_metrics["total_tokens"] += token_usage
     sys_metrics["latencies"].append(latency)
     
-    return {"messages": [response],
-            "sys_metrics":sys_metrics
-            }
+    return {
+        "messages": [response],
+        "sys_metrics": sys_metrics
+    }
