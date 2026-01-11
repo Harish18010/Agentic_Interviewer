@@ -51,3 +51,51 @@ The application follows a modular architecture orchestrated by a central State G
 ```bash
 git clone [https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git](https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git)
 cd YOUR_REPO_NAME
+```
+### 2. Create a Virtual Environment
+```bash
+python -m venv venv
+
+# Windows
+venv\Scripts\activate
+
+# Mac/Linux
+source venv/bin/activate
+```
+### 3. Install Dependencies
+```bash
+pip install -r requirements.txt
+```
+
+### 4.Configuration
+Create a .env file in the root directory and add your API credentials:
+```bash
+GROQ_API_KEY=gsk_your_api_key_here
+```
+
+### 5.Run the Application
+```bash
+streamlit run main.py
+```
+## Usage Guide
+
+1. **Upload Resume:** On the sidebar, upload a candidate's resume (PDF format).
+2. **Configure Role:** Select the target role (e.g., AI Engineer, SDE) and experience level.
+3. **Start Interview:** Click "Start Interview" to initialize the agent workflow.
+4. **Interaction:**
+    * The system will audibly ask the first question.
+    * Type your answer in the chat box.
+    * The Grader Agent will evaluate the response silently.
+    * The Interviewer Agent will either ask a follow-up or move to the next topic.
+5. **Report:** Upon completion (5 questions), download the detailed PDF feedback report.
+
+## Metric Tracking
+
+The application dashboard includes a **Live Metrics** section designed to demonstrate system optimization:
+
+* **Tokens:** Tracks total context window usage (Input + Output tokens) to estimate API costs.
+* **Avg Latency:** Monitors the "Time-to-First-Token" ensuring the system remains responsive (<2s).
+
+  This project is done for educational purposes only
+
+
