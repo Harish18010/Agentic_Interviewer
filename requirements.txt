@@ -4,6 +4,6 @@ langgraph
 streamlit
 pydantic
 python-dotenv
-pypdf
+pymupdf
 gTTS
 fpdf
